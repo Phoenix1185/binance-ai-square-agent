@@ -44,6 +44,9 @@ jobs:
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+          SELF_HOSTED_API_KEY: ${{ secrets.SELF_HOSTED_API_KEY }}
+          SELF_HOSTED_API_URL: ${{ vars.SELF_HOSTED_API_URL }}
+          SELF_HOSTED_MODEL: ${{ vars.SELF_HOSTED_MODEL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: |

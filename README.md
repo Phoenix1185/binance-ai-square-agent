@@ -17,7 +17,19 @@ The companion Phoenix AI Router API is running at:
 - [API base URL](https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app/)
 - [Interactive API documentation](https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app/docs)
 
-Configure Gemini keys in the Koyeb service environment if the router is also used for generation.
+The agent can use this router as its final AI fallback. Configure `SELF_HOSTED_API_KEY` in GitHub Actions and optionally override `SELF_HOSTED_API_URL` and `SELF_HOSTED_MODEL`.
+
+## Independent AI fallback chain
+
+The agent tries providers independently in this order:
+
+1. OpenAI using `OPENAI_API_KEY`
+2. Gemini using `GEMINI_API_KEY_1`
+3. Gemini using `GEMINI_API_KEY_2`
+4. Gemini using `GEMINI_API_KEY_3`
+5. Self-hosted Phoenix AI Router using `SELF_HOSTED_API_KEY`
+
+Missing credentials are skipped. A failure, timeout, quota error, or invalid response from one provider is caught and the next configured provider is tried. Therefore, a self-hosted-only setup works when OpenAI and Gemini secrets are absent, and a failure in one provider cannot prevent another configured provider from running.
 
 ## Important
 
@@ -25,21 +37,11 @@ This repository is designed for legitimate, original content. It does not automa
 
 The repository uses the Binance Square posting API key only for Square publishing. Never put a Binance trading/withdrawal API key in this project.
 
-## AI provider fallback
-
-The agent prefers OpenAI when `OPENAI_API_KEY` is configured. If that request fails, or if OpenAI is not configured, it tries Gemini keys in this order:
-
-1. `GEMINI_API_KEY_1`
-2. `GEMINI_API_KEY_2`
-3. `GEMINI_API_KEY_3`
-
-A failed, rate-limited, or revoked Gemini key automatically falls through to the next configured key. The default Gemini model is `gemini-2.5-flash`; override it with the repository variable `GEMINI_MODEL`. Keys are never printed to logs.
-
 ## Architecture
 
 GitHub Actions cron
 → research Binance market/news data
-→ generate original post with AI
+→ generate original post with AI fallback chain
 → duplicate/spam/safety checks
 → publish to Binance Square
 → save posting history
@@ -50,7 +52,7 @@ GitHub Actions cron
 - GitHub account
 - Binance Square Creator account eligible to publish
 - Binance Square OpenAPI key
-- At least one AI provider key: OpenAI or Gemini
+- At least one AI provider: OpenAI, Gemini, or the self-hosted Phoenix AI Router
 
 The Binance Square key is separate from normal Binance trading/asset API credentials.
 
@@ -64,22 +66,27 @@ Add the Binance key:
 
 - `BINANCE_SQUARE_OPENAPI_KEY`
 
-Add either OpenAI:
+Add one or more AI providers:
 
 - `OPENAI_API_KEY`
-
-Or one to three Gemini keys for fallback:
-
 - `GEMINI_API_KEY_1`
 - `GEMINI_API_KEY_2`
 - `GEMINI_API_KEY_3`
+- `SELF_HOSTED_API_KEY`
 
-You can add all four provider keys. OpenAI is tried first, then Gemini 1, 2, and 3. Never put keys into source files.
+For self-hosted-only mode, you need only:
+
+- `BINANCE_SQUARE_OPENAPI_KEY`
+- `SELF_HOSTED_API_KEY`
 
 Optional repository variables:
 
 - `OPENAI_MODEL` — default `gpt-5-mini`
 - `GEMINI_MODEL` — default `gemini-2.5-flash`
+- `SELF_HOSTED_API_URL` — default `https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app`
+- `SELF_HOSTED_MODEL` — default `deepseek-v4-flash`
+
+Never put keys into source files. Keys are never printed to logs.
 
 ### 2. Test manually
 
@@ -99,7 +106,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 export BINANCE_SQUARE_OPENAPI_KEY="YOUR_SQUARE_KEY"
-export GEMINI_API_KEY_1="YOUR_GEMINI_KEY"
+export SELF_HOSTED_API_KEY="YOUR_ROUTER_API_KEY"
 
 python src/agent.py
 ```
@@ -118,6 +125,9 @@ Environment variables:
 - `GEMINI_API_KEY_1` — optional first Gemini fallback key
 - `GEMINI_API_KEY_2` — optional second Gemini fallback key
 - `GEMINI_API_KEY_3` — optional third Gemini fallback key
+- `SELF_HOSTED_API_KEY` — optional final fallback router key
+- `SELF_HOSTED_API_URL` — optional router base URL; defaults to the Koyeb service
+- `SELF_HOSTED_MODEL` — optional router model; default `deepseek-v4-flash`
 - `BINANCE_SQUARE_OPENAPI_KEY` — required unless using `--dry-run`
 - `OPENAI_MODEL` — optional; default `gpt-5-mini`
 - `GEMINI_MODEL` — optional; default `gemini-2.5-flash`
@@ -126,7 +136,7 @@ Environment variables:
 
 ## Security
 
-Do not commit API keys, `.env`, wallet/private keys, or Binance trading credentials. The `.gitignore` excludes common secret files. Gemini keys are sent only to Google's Generative Language API and are never included in logs.
+Do not commit API keys, `.env`, wallet/private keys, or Binance trading credentials. The `.gitignore` excludes common secret files. Provider keys are sent only to their configured provider and are never included in logs.
 
 ## License
 

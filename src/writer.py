@@ -31,11 +31,17 @@ Requirements:
 - Return ONLY the final post.
 """
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent"
 )
+SELF_HOSTED_API_URL = os.getenv(
+    "SELF_HOSTED_API_URL",
+    "https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app",
+).rstrip("/") or "https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app"
+SELF_HOSTED_API_KEY = os.getenv("SELF_HOSTED_API_KEY")
+SELF_HOSTED_MODEL = os.getenv("SELF_HOSTED_MODEL") or "deepseek-v4-flash"
 
 
 def _build_prompt(research, previous_posts):
@@ -95,27 +101,76 @@ def _generate_with_gemini(api_key, prompt):
     return text
 
 
+def _extract_self_hosted_text(data):
+    """Accept common router response shapes without coupling to one model SDK."""
+    candidates = [
+        data.get("response"),
+        data.get("text"),
+        data.get("content"),
+        data.get("output"),
+        data.get("message"),
+    ]
+    choices = data.get("choices") or []
+    if choices and isinstance(choices[0], dict):
+        choice = choices[0]
+        candidates.extend([
+            choice.get("text"),
+            (choice.get("message") or {}).get("content"),
+        ])
+
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+
+    raise RuntimeError("Self-hosted router returned no usable text")
+
+
+def _generate_with_self_hosted(prompt):
+    if not SELF_HOSTED_API_KEY:
+        raise RuntimeError("SELF_HOSTED_API_KEY is not configured")
+
+    endpoint = SELF_HOSTED_API_URL
+    if not endpoint.endswith("/chat"):
+        endpoint += "/chat"
+
+    response = requests.post(
+        endpoint,
+        headers={
+            "X-API-Key": SELF_HOSTED_API_KEY,
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": SELF_HOSTED_MODEL,
+            "message": f"{SYSTEM_PROMPT}\n\n{prompt}",
+        },
+        timeout=90,
+    )
+    response.raise_for_status()
+    return _extract_self_hosted_text(response.json())
+
+
 def generate_post(research, previous_posts):
     prompt = _build_prompt(research, previous_posts)
     failures = []
+    configured = 0
 
-    # Prefer OpenAI when configured so existing deployments keep their behavior.
+    # Each provider is isolated: a missing key or provider error only advances
+    # to the next provider and never prevents another configured provider from
+    # being attempted.
     if os.getenv("OPENAI_API_KEY"):
+        configured += 1
         try:
             print(f"Using OpenAI model {OPENAI_MODEL}.")
             return _generate_with_openai(prompt)
         except Exception as exc:
-            print(f"OpenAI generation failed; trying Gemini fallback: {exc}")
+            print(f"OpenAI generation failed; trying the next provider: {exc}")
             failures.append(f"OpenAI: {exc}")
 
-    # Gemini keys are intentionally tried in a stable order. This allows a
-    # rate-limited or revoked key to fall through to the next configured key.
     gemini_keys = [
         os.getenv("GEMINI_API_KEY_1"),
         os.getenv("GEMINI_API_KEY_2"),
         os.getenv("GEMINI_API_KEY_3"),
     ]
-    configured = 0
     for index, api_key in enumerate(gemini_keys, start=1):
         if not api_key:
             continue
@@ -125,13 +180,22 @@ def generate_post(research, previous_posts):
             return _generate_with_gemini(api_key, prompt)
         except Exception as exc:
             # Do not print the key or request URL because the URL contains the key.
-            print(f"Gemini key {index} failed; trying the next key: {exc}")
+            print(f"Gemini key {index} failed; trying the next provider: {exc}")
             failures.append(f"Gemini key {index}: {exc}")
 
-    if not os.getenv("OPENAI_API_KEY") and configured == 0:
+    if SELF_HOSTED_API_KEY:
+        configured += 1
+        try:
+            print(f"Using self-hosted router model {SELF_HOSTED_MODEL}.")
+            return _generate_with_self_hosted(prompt)
+        except Exception as exc:
+            print(f"Self-hosted generation failed: {exc}")
+            failures.append(f"Self-hosted: {exc}")
+
+    if configured == 0:
         raise RuntimeError(
-            "No AI provider configured. Add OPENAI_API_KEY or "
-            "GEMINI_API_KEY_1, GEMINI_API_KEY_2, or GEMINI_API_KEY_3."
+            "No AI provider configured. Add OPENAI_API_KEY, one of "
+            "GEMINI_API_KEY_1/2/3, or SELF_HOSTED_API_KEY."
         )
 
     raise RuntimeError("All configured AI providers failed: " + " | ".join(failures))
