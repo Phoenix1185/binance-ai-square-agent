@@ -38,6 +38,16 @@ def publish_to_square(text):
             f"Network error while publishing: {exc}"
         ) from exc
 
+    if response.status_code == 451:
+        # Do not print request headers or the API key.
+        raise BinanceSquareError(
+            "HTTP 451 from Binance Square. This usually indicates that "
+            "Binance is refusing the request based on geographic, network, "
+            "or policy restrictions. Check the NETWORK DIAGNOSTICS above "
+            "for the runtime's outbound IP and Binance reachability. "
+            "Changing hosting region may help, but is not guaranteed."
+        )
+
     try:
         data = response.json()
     except ValueError:

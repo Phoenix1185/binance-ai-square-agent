@@ -1,0 +1,37 @@
+# Render Blueprint for the Binance AI Square Agent.
+# Render Cron Jobs use UTC: 07:00 UTC = 08:00 Nigeria time (WAT).
+# Secret values are intentionally not stored here; add them in Render Environment.
+services:
+  - type: cron
+    name: binance-ai-square-agent
+    runtime: python
+    plan: starter
+    region: frankfurt
+    schedule: "0 7 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python src/agent.py
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY_1
+        sync: false
+      - key: GEMINI_API_KEY_2
+        sync: false
+      - key: GEMINI_API_KEY_3
+        sync: false
+      - key: SELF_HOSTED_API_KEY
+        sync: false
+      - key: BINANCE_SQUARE_OPENAPI_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: SELF_HOSTED_API_URL
+        value: https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app
+      - key: SELF_HOSTED_MODEL
+        value: deepseek-v4-flash
+      - key: POST_MIN_WORDS
+        value: "90"
+      - key: POST_MAX_WORDS
+        value: "230"

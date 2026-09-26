@@ -96,6 +96,55 @@ GitHub → Actions → **Binance AI Daily Post** → **Run workflow**. Select `d
 
 The included workflow is configured for **08:00 Nigeria time (WAT)**, which is 07:00 UTC. GitHub Actions schedules can occasionally be delayed during high load. If a precise posting minute is critical, use an external scheduler instead.
 
+
+## Render deployment (recommended production test)
+
+This repository now includes `render.yaml` for a Render Cron Job.
+
+Render cron schedules are UTC. The included schedule:
+
+```text
+0 7 * * *
+```
+
+runs at 07:00 UTC, which is 08:00 in Nigeria (WAT).
+
+### Deploy
+
+1. Push this repository to GitHub.
+2. In Render, create a new **Blueprint** and select the repository.
+3. Render will read `render.yaml`.
+4. In the Render Cron Job's **Environment** page, add:
+   - `BINANCE_SQUARE_OPENAPI_KEY`
+   - Any AI provider secrets you want to enable: `OPENAI_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, and/or `SELF_HOSTED_API_KEY`.
+5. Trigger a manual run from the Render Cron Job's **Runs** page.
+6. Check the logs.
+
+The committed `render.yaml` declares all provider variables, keeps secret values out of source control, and uses Frankfurt as the initial test region. Render supports environment variables for cron jobs, so secrets stay out of the repository. Render's current documentation says cron jobs can be manually triggered and have run logs.
+
+### 451 troubleshooting
+
+Every run prints:
+
+```text
+=== NETWORK DIAGNOSTICS ===
+Outbound public IP: ...
+api.binance.com: HTTP ...
+www.binance.com: HTTP ...
+=== END NETWORK DIAGNOSTICS ===
+```
+
+If GitHub Actions returns HTTP 451 but Render returns HTTP 200/normal Binance responses and successfully publishes, the runner network was a likely factor.
+
+If Render also returns HTTP 451, changing hosts/regions is not guaranteed to fix it. Treat that as a Binance-side geographic/network/API eligibility issue and investigate the exact Square API response before paying for dedicated IPs.
+
+Render documents that normal services use shared outbound IP ranges by region. Dedicated outbound IP sets require a Pro workspace or higher and carry an additional monthly charge, so do **not** buy one just to test this.
+
+### Cost note
+
+Render currently documents a minimum monthly charge for cron jobs, so this is not a zero-cost Render deployment. The repository keeps GitHub Actions as a backup/test path.
+
+
 ## Local test
 
 Python 3.11+ is recommended.

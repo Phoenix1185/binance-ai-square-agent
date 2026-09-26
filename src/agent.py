@@ -8,6 +8,7 @@ from research import collect_research
 from writer import generate_post
 from quality import validate_post
 from binance_square import publish_to_square, BinanceSquareError
+from network_diagnostics import print_network_diagnostics
 
 HISTORY_FILE = "data/history.json"
 
@@ -41,6 +42,7 @@ def main():
     args = parser.parse_args()
 
     print("=== Binance AI Square Agent ===")
+    print_network_diagnostics()
 
     history = load_history()
 
