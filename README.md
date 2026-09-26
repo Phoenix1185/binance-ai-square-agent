@@ -16,6 +16,16 @@ This repository is designed for legitimate, original content. It does not automa
 
 The repository uses the Binance Square posting API key only for Square publishing. Never put a Binance trading/withdrawal API key in this project.
 
+## AI provider fallback
+
+The agent prefers OpenAI when `OPENAI_API_KEY` is configured. If that request fails, or if OpenAI is not configured, it tries Gemini keys in this order:
+
+1. `GEMINI_API_KEY_1`
+2. `GEMINI_API_KEY_2`
+3. `GEMINI_API_KEY_3`
+
+A failed, rate-limited, or revoked Gemini key automatically falls through to the next configured key. The default Gemini model is `gemini-2.5-flash`; override it with the repository variable `GEMINI_MODEL`. Keys are never printed to logs.
+
 ## Architecture
 
 GitHub Actions cron
@@ -31,7 +41,7 @@ GitHub Actions cron
 - GitHub account
 - Binance Square Creator account eligible to publish
 - Binance Square OpenAPI key
-- OpenAI API key
+- At least one AI provider key: OpenAI or Gemini
 
 The Binance Square key is separate from normal Binance trading/asset API credentials.
 
@@ -39,14 +49,28 @@ The Binance Square key is separate from normal Binance trading/asset API credent
 
 ### 1. Add GitHub Actions secrets
 
-Repository → Settings → Secrets and variables → Actions → New repository secret
+Repository → Settings and variables → Actions → New repository secret
 
-Add:
+Add the Binance key:
 
 - `BINANCE_SQUARE_OPENAPI_KEY`
+
+Add either OpenAI:
+
 - `OPENAI_API_KEY`
 
-Never put either key into source files.
+Or one to three Gemini keys for fallback:
+
+- `GEMINI_API_KEY_1`
+- `GEMINI_API_KEY_2`
+- `GEMINI_API_KEY_3`
+
+You can add all four provider keys. OpenAI is tried first, then Gemini 1, 2, and 3. Never put keys into source files.
+
+Optional repository variables:
+
+- `OPENAI_MODEL` — default `gpt-5-mini`
+- `GEMINI_MODEL` — default `gemini-2.5-flash`
 
 ### 2. Test manually
 
@@ -66,7 +90,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 export BINANCE_SQUARE_OPENAPI_KEY="YOUR_SQUARE_KEY"
-export OPENAI_API_KEY="YOUR_OPENAI_KEY"
+export GEMINI_API_KEY_1="YOUR_GEMINI_KEY"
 
 python src/agent.py
 ```
@@ -81,15 +105,19 @@ python src/agent.py --dry-run
 
 Environment variables:
 
-- `OPENAI_API_KEY` — required
+- `OPENAI_API_KEY` — optional primary provider
+- `GEMINI_API_KEY_1` — optional first Gemini fallback key
+- `GEMINI_API_KEY_2` — optional second Gemini fallback key
+- `GEMINI_API_KEY_3` — optional third Gemini fallback key
 - `BINANCE_SQUARE_OPENAPI_KEY` — required unless using `--dry-run`
 - `OPENAI_MODEL` — optional; default `gpt-5-mini`
+- `GEMINI_MODEL` — optional; default `gemini-2.5-flash`
 - `POST_MIN_WORDS` — optional; default 90
 - `POST_MAX_WORDS` — optional; default 230
 
 ## Security
 
-Do not commit API keys, `.env`, wallet/private keys, or Binance trading credentials. The `.gitignore` excludes common secret files.
+Do not commit API keys, `.env`, wallet/private keys, or Binance trading credentials. The `.gitignore` excludes common secret files. Gemini keys are sent only to Google's Generative Language API and are never included in logs.
 
 ## License
 
