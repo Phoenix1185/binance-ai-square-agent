@@ -10,6 +10,15 @@ The repository includes a responsive GitHub Pages dashboard that displays the ag
 
 GitHub Pages is a static site, so it does not hold API keys or execute the Python agent in the browser. The agent runs securely in GitHub Actions; the Pages dashboard only displays the history committed by the workflow.
 
+## Self-hosted AI Router
+
+The companion Phoenix AI Router API is running at:
+
+- [API base URL](https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app/)
+- [Interactive API documentation](https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app/docs)
+
+Configure Gemini keys in the Koyeb service environment if the router is also used for generation.
+
 ## Important
 
 This repository is designed for legitimate, original content. It does not automate likes, follows, comments, views, multiple accounts, or artificial engagement.
