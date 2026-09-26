@@ -1,0 +1,9 @@
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+data/runtime_history.json

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Binance AI Square Agent</title>
+  <meta name="description" content="A transparent dashboard for an original crypto-content publishing agent.">
+  <style>
+    :root { color-scheme: dark; --bg:#080b12; --panel:#101621; --line:#202b3d; --muted:#8c9ab0; --text:#f4f7fb; --gold:#f0b90b; --green:#2dd4a7; --red:#ff6b7a; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 80% -10%, #1d2739 0, transparent 38%), var(--bg); color:var(--text); font:15px/1.6 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    .wrap { max-width:1060px; margin:auto; padding:28px 20px 64px; }
+    nav { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:70px; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:750; letter-spacing:.01em; }
+    .mark { display:grid; place-items:center; width:34px; height:34px; border-radius:10px; background:var(--gold); color:#16120a; font-weight:900; }
+    a { color:inherit; }
+    .nav-link { color:var(--muted); text-decoration:none; border:1px solid var(--line); border-radius:9px; padding:7px 12px; }
+    .nav-link:hover { border-color:#52627d; color:var(--text); }
+    .eyebrow { color:var(--gold); font-size:12px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { max-width:760px; margin:12px 0 18px; font-size:clamp(40px,7vw,76px); line-height:1.03; letter-spacing:-.055em; }
+    .lede { color:var(--muted); max-width:650px; font-size:18px; }
+    .hero { display:grid; grid-template-columns:1.3fr .7fr; gap:36px; align-items:end; margin-bottom:64px; }
+    .status { border:1px solid var(--line); background:rgba(16,22,33,.82); padding:22px; border-radius:16px; }
+    .status strong { display:block; font-size:28px; margin:5px 0 3px; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:7px; box-shadow:0 0 12px var(--green); }
+    .muted { color:var(--muted); }
+    .section-head { display:flex; justify-content:space-between; align-items:end; margin-bottom:16px; }
+    h2 { margin:0; font-size:25px; letter-spacing:-.025em; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:15px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; }
+    .card time { color:var(--muted); font-size:12px; }
+    .post { white-space:pre-wrap; margin:16px 0 0; color:#dce4ef; }
+    .post a { color:var(--gold); }
+    .empty { color:var(--muted); padding:30px 0; }
+    footer { border-top:1px solid var(--line); margin-top:70px; padding-top:20px; color:var(--muted); font-size:13px; }
+    @media (max-width:720px) { nav { margin-bottom:48px; } .hero { grid-template-columns:1fr; gap:24px; margin-bottom:48px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <nav>
+      <div class="brand"><span class="mark">B</span> Binance AI Square Agent</div>
+      <a class="nav-link" href="https://github.com/Phoenix1185/binance-ai-square-agent" target="_blank" rel="noreferrer">View source ↗</a>
+    </nav>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Original crypto intelligence</div>
+        <h1>Research first.<br><span style="color:var(--gold)">Publish responsibly.</span></h1>
+        <p class="lede">An automated workflow researches public market data, drafts an original Binance Square post, runs safety and quality checks, and records the result transparently.</p>
+      </div>
+      <aside class="status"><span class="dot"></span><span class="muted">Agent status</span><strong>Online</strong><span class="muted">Runs daily via GitHub Actions</span></aside>
+    </section>
+    <section>
+      <div class="section-head"><h2>Publishing history</h2><span id="count" class="muted">Loading…</span></div>
+      <div id="history" class="grid"><div class="empty">Loading the latest recorded posts…</div></div>
+    </section>
+    <footer>This dashboard reports the agent’s recorded output. It is not financial advice. Market data and posts may be delayed.</footer>
+  </main>
+  <script>
+    const history = document.querySelector('#history');
+    const count = document.querySelector('#count');
+    const formatDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString(undefined, {dateStyle:'medium', timeStyle:'short'}); };
+    fetch('./data/history.json', {cache:'no-store'}).then(r => r.ok ? r.json() : []).then(items => {
+      items = Array.isArray(items) ? items.slice().reverse() : [];
+      count.textContent = `${items.length} recorded ${items.length === 1 ? 'post' : 'posts'}`;
+      if (!items.length) { history.innerHTML = '<div class="empty">No posts have been published yet. Run the workflow manually to begin.</div>'; return; }
+      history.innerHTML = items.map(item => `<article class="card"><time>${formatDate(item.created_at_utc)}</time><div class="post">${(item.post || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</div>${item.url ? `<p><a href="${item.url}" target="_blank" rel="noreferrer">Open on Binance Square ↗</a></p>` : ''}</article>`).join('');
+    }).catch(() => { count.textContent = 'Unavailable'; history.innerHTML = '<div class="empty">History is temporarily unavailable. Please try again shortly.</div>'; });
+  </script>
+</body>
+</html>

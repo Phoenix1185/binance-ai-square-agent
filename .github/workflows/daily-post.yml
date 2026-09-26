@@ -1,0 +1,65 @@
+name: Binance AI Daily Post
+
+on:
+  schedule:
+    # 07:00 UTC = 08:00 Nigeria time (WAT)
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Generate and validate only; do not publish"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: binance-square-daily-post
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run AI agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          BINANCE_SQUARE_OPENAPI_KEY: ${{ secrets.BINANCE_SQUARE_OPENAPI_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python src/agent.py --dry-run
+          else
+            python src/agent.py
+          fi
+
+      - name: Commit posting history
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "binance-ai-square-agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/history.json
+
+          if git diff --cached --quiet; then
+            echo "No history changes to commit."
+          else
+            git commit -m "Update Square posting history"
+            git push
+          fi
