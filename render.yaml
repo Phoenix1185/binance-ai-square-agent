@@ -1,16 +1,22 @@
-# Render Blueprint for the Binance AI Square Agent.
-# Render Cron Jobs use UTC: 07:00 UTC = 08:00 Nigeria time (WAT).
-# Secret values are intentionally not stored here; add them in Render Environment.
+# FREE Render Web Service.
+# GitHub Actions is only the scheduler/trigger; Binance is contacted by Render.
 services:
-  - type: cron
+  - type: web
     name: binance-ai-square-agent
     runtime: python
-    plan: starter
+    plan: free
     region: frankfurt
-    schedule: "0 7 * * *"
     buildCommand: pip install -r requirements.txt
-    startCommand: python src/agent.py
+    startCommand: gunicorn --bind 0.0.0.0:$PORT server:app
     envVars:
+      - key: AGENT_TRIGGER_TOKEN
+        sync: false
+      - key: GITHUB_AGENT_TOKEN
+        sync: false
+      - key: GITHUB_AGENT_REPO
+        value: Phoenix1185/binance-ai-square-agent
+      - key: BINANCE_SQUARE_OPENAPI_KEY
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: GEMINI_API_KEY_1
@@ -20,8 +26,6 @@ services:
       - key: GEMINI_API_KEY_3
         sync: false
       - key: SELF_HOSTED_API_KEY
-        sync: false
-      - key: BINANCE_SQUARE_OPENAPI_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5-mini

@@ -1,0 +1,60 @@
+name: Trigger Render Binance Agent
+
+on:
+  schedule:
+    # 07:00 UTC = 08:00 Nigeria time (WAT)
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only generate/validate; do not publish"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate configuration
+        env:
+          RENDER_AGENT_URL: ${{ secrets.RENDER_AGENT_URL }}
+          AGENT_TRIGGER_TOKEN: ${{ secrets.AGENT_TRIGGER_TOKEN }}
+        run: |
+          test -n "$RENDER_AGENT_URL" || { echo "Missing RENDER_AGENT_URL"; exit 1; }
+          test -n "$AGENT_TRIGGER_TOKEN" || { echo "Missing AGENT_TRIGGER_TOKEN"; exit 1; }
+
+      - name: Wake Render and wait for health
+        env:
+          RENDER_AGENT_URL: ${{ secrets.RENDER_AGENT_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$RENDER_AGENT_URL/health" || true)
+            echo "Health attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Render service did not become healthy in time."
+          exit 1
+
+      - name: Trigger Render agent
+        env:
+          RENDER_AGENT_URL: ${{ secrets.RENDER_AGENT_URL }}
+          AGENT_TRIGGER_TOKEN: ${{ secrets.AGENT_TRIGGER_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "The free Render endpoint currently exposes /run for publishing only."
+            echo "Use the Render service logs for the first live test."
+            exit 0
+          fi
+
+          curl --fail-with-body -sS \
+            -X POST "$RENDER_AGENT_URL/run" \
+            -H "X-Agent-Trigger-Token: $AGENT_TRIGGER_TOKEN" \
+            -H "Content-Type: application/json" \
+            --max-time 600

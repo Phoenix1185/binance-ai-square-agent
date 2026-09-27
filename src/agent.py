@@ -1,6 +1,9 @@
 import argparse
 import json
 import os
+import base64
+
+import requests
 from datetime import datetime, timezone
 
 from config import POST_MIN_WORDS, POST_MAX_WORDS
@@ -32,15 +35,44 @@ def save_history(history):
         json.dump(history[-100:], handle, ensure_ascii=False, indent=2)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Generate and validate a post without publishing.",
-    )
-    args = parser.parse_args()
+def persist_history_to_github():
+    """Optionally persist history to the GitHub repository via Contents API."""
+    token = os.getenv("GITHUB_AGENT_TOKEN")
+    repo = os.getenv("GITHUB_AGENT_REPO")
+    if not token or not repo:
+        return {"saved": False, "reason": "GitHub persistence not configured"}
 
+    path = "data/history.json"
+    try:
+        with open(HISTORY_FILE, "rb") as handle:
+            content = base64.b64encode(handle.read()).decode("ascii")
+
+        api = f"https://api.github.com/repos/{repo}/contents/{path}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        current = requests.get(api, headers=headers, timeout=20)
+        sha = current.json().get("sha") if current.status_code == 200 else None
+
+        payload = {
+            "message": "Update Binance Square posting history",
+            "content": content,
+        }
+        if sha:
+            payload["sha"] = sha
+
+        response = requests.put(api, headers=headers, json=payload, timeout=20)
+        response.raise_for_status()
+        print("GitHub history persistence: saved")
+        return {"saved": True}
+    except Exception as exc:
+        print(f"GitHub history persistence skipped: {exc}")
+        return {"saved": False, "reason": str(exc)}
+
+
+def run_agent(dry_run=False):
     print("=== Binance AI Square Agent ===")
     print_network_diagnostics()
 
@@ -69,12 +101,14 @@ def main():
 
     print("Validation passed.")
 
-    if args.dry_run:
-        print("DRY RUN: nothing was published.")
-        return
+    if dry_run:
+        return {
+            "success": True,
+            "dry_run": True,
+            "post": post,
+        }
 
     print("[4/4] Publishing to Binance Square...")
-
     result = publish_to_square(post)
 
     entry = {
@@ -88,9 +122,23 @@ def main():
 
     history.append(entry)
     save_history(history)
+    persistence = persist_history_to_github()
 
     print("\n=== PUBLISH RESULT ===")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    result["history_persistence"] = persistence
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate and validate a post without publishing.",
+    )
+    args = parser.parse_args()
+    run_agent(dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
