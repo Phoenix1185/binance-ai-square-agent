@@ -1,4 +1,4 @@
-name: Binance AI Daily Post
+name: Trigger Binance AI Agent
 
 on:
   schedule:
@@ -16,54 +16,81 @@ permissions:
   contents: write
 
 concurrency:
-  group: binance-square-daily-post
+  group: binance-square-daily-trigger
   cancel-in-progress: false
 
 jobs:
-  publish:
+  trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run AI agent
+      - name: Sync saved history to Render
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          BINANCE_SQUARE_OPENAPI_KEY: ${{ secrets.BINANCE_SQUARE_OPENAPI_KEY }}
-          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
-          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
-          GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
-          SELF_HOSTED_API_KEY: ${{ secrets.SELF_HOSTED_API_KEY }}
-          SELF_HOSTED_API_URL: ${{ vars.SELF_HOSTED_API_URL }}
-          SELF_HOSTED_MODEL: ${{ vars.SELF_HOSTED_MODEL }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          RENDER_AGENT_URL: ${{ secrets.RENDER_AGENT_URL }}
+          AGENT_TRIGGER_TOKEN: ${{ secrets.AGENT_TRIGGER_TOKEN }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            python src/agent.py --dry-run
-          else
-            python src/agent.py
-          fi
+          test -n "$RENDER_AGENT_URL"
+          test -n "$AGENT_TRIGGER_TOKEN"
+          curl --fail-with-body --show-error --silent \
+            --retry 3 --retry-delay 3 \
+            -X POST "$RENDER_AGENT_URL/sync-history" \
+            -H "Authorization: Bearer $AGENT_TRIGGER_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @<(python - <<'PY'
+          import json
+          with open("data/history.json", "r", encoding="utf-8") as f:
+              history = json.load(f)
+          print(json.dumps({"history": history}, ensure_ascii=False))
+          PY
+          )
 
-      - name: Commit posting history
+      - name: Trigger Render agent
+        env:
+          RENDER_AGENT_URL: ${{ secrets.RENDER_AGENT_URL }}
+          AGENT_TRIGGER_TOKEN: ${{ secrets.AGENT_TRIGGER_TOKEN }}
+        run: |
+          test -n "$RENDER_AGENT_URL"
+          test -n "$AGENT_TRIGGER_TOKEN"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            PATH_SUFFIX="/run?dry_run=1"
+          else
+            PATH_SUFFIX="/run"
+          fi
+          curl --fail-with-body --show-error --silent \
+            --retry 2 --retry-delay 5 \
+            -X POST "$RENDER_AGENT_URL$PATH_SUFFIX" \
+            -H "Authorization: Bearer $AGENT_TRIGGER_TOKEN"
+
+      - name: Pull updated history from Render
+        if: ${{ inputs.dry_run != 'true' }}
+        env:
+          RENDER_AGENT_URL: ${{ secrets.RENDER_AGENT_URL }}
+          AGENT_TRIGGER_TOKEN: ${{ secrets.AGENT_TRIGGER_TOKEN }}
+        run: |
+          curl --fail-with-body --show-error --silent \
+            --retry 2 --retry-delay 3 \
+            "$RENDER_AGENT_URL/history" \
+            -H "Authorization: Bearer $AGENT_TRIGGER_TOKEN" \
+            > /tmp/render-history.json
+          python - <<'PY'
+          import json
+          with open('/tmp/render-history.json', 'r', encoding='utf-8') as f:
+              payload = json.load(f)
+          with open('data/history.json', 'w', encoding='utf-8') as f:
+              json.dump(payload.get('history', []), f, ensure_ascii=False, indent=2)
+              f.write('\n')
+          PY
+
+      - name: Commit updated history
         if: ${{ inputs.dry_run != 'true' }}
         run: |
           git config user.name "binance-ai-square-agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add data/history.json
-
           if git diff --cached --quiet; then
             echo "No history changes to commit."
           else

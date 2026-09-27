@@ -1,52 +1,76 @@
 # Binance AI Square Agent
 
-A free-hosting architecture for an automated Binance Square content agent.
+Automatically researches public crypto data, generates an original Binance Square post, validates it, and publishes it once per day through the Binance Square OpenAPI.
 
-## Current architecture
+## Architecture
 
 ```text
-GitHub Actions (free scheduler)
-        |
-        | HTTPS trigger only
-        v
-Render Free Web Service
-        |
-        +--> public crypto research
-        +--> AI fallback chain
-        |      1. OpenAI
-        |      2. Gemini key 1
-        |      3. Gemini key 2
-        |      4. Gemini key 3
-        |      5. Self-hosted Phoenix AI Router
-        |
-        +--> quality/duplicate checks
-        |
-        +--> Binance Square OpenAPI
+GitHub Actions (daily scheduler and history sync)
+          |
+          | authenticated HTTPS only
+          v
+Render Free Web Service (Frankfurt)
+          |
+          +--> Binance market/news research
+          +--> OpenAI -> Gemini 1 -> Gemini 2 -> Gemini 3 -> self-hosted AI fallback
+          +--> quality and duplicate checks
+          +--> Binance Square publishing
 ```
 
-**Important:** GitHub Actions does not call Binance. It only wakes/triggers the Render service. The Binance Square request therefore originates from Render.
+The Binance request is made by Render, not by the GitHub-hosted runner. This provides a useful comparison when GitHub Actions receives Binance HTTP 451 responses.
 
-This is specifically intended to test whether the HTTP 451 received from GitHub Actions is caused by the GitHub runner network/location.
+## Live dashboard and AI router
 
-## Free deployment
+- GitHub Pages dashboard: <https://phoenix1185.github.io/binance-ai-square-agent/>
+- Phoenix AI Router API: <https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app/>
+- Phoenix AI Router docs: <https://concerned-swordfish-suhailtechlnfo-01fd2de0.koyeb.app/docs>
 
-Render is configured as a **Free Web Service**, not a Render Cron Job. The daily scheduler remains GitHub Actions, which only sends an authenticated HTTPS request to Render.
+GitHub Pages is static. It does not contain secrets or execute the agent.
 
-Render free services can spin down when idle. The GitHub trigger first calls `/health`, which wakes the service, waits for HTTP 200, and then calls `/run`.
+## AI fallback chain
 
-### Render setup
+Providers are attempted independently in this order:
+
+1. OpenAI — `OPENAI_API_KEY`
+2. Gemini key 1 — `GEMINI_API_KEY_1`
+3. Gemini key 2 — `GEMINI_API_KEY_2`
+4. Gemini key 3 — `GEMINI_API_KEY_3`
+5. Self-hosted Phoenix AI Router — `SELF_HOSTED_API_KEY`
+
+Missing credentials are skipped. Provider errors, timeouts, quota failures, and invalid responses advance to the next configured provider. A self-hosted-only setup therefore works without OpenAI or Gemini credentials.
+
+## Render Free Web Service
+
+The included `render.yaml` creates a **Free Web Service**, not a paid Render Cron Job. The service runs `python src/web.py`, binds to Render's `$PORT`, and exposes:
+
+- `GET /health` — public health check
+- `POST /run` — authenticated agent execution
+- `GET /history` — authenticated history read
+- `POST /sync-history` — authenticated history sync from GitHub Actions
+
+### Create the service
 
 1. Push this repository to GitHub.
-2. Render → **New → Blueprint** → select the repository.
-3. Render reads `render.yaml` and creates a **Free Web Service**.
-4. In Render Environment, configure:
+2. In Render choose **New → Web Service**.
+3. Choose **Public Git Repository**.
+4. Enter: <https://github.com/Phoenix1185/binance-ai-square-agent>
+5. Use the `main` branch and let Render read `render.yaml`.
+6. The service should use the Frankfurt region and Free plan.
+
+The Render start command is:
+
+```text
+python src/web.py
+```
+
+### Render environment variables
 
 Required:
 
-- `AGENT_TRIGGER_TOKEN` — random long secret used only to authorize `/run`
-- `BINANCE_SQUARE_OPENAPI_KEY` — your Binance Square OpenAPI posting key
+- `AGENT_TRIGGER_TOKEN` — generate a long random value, for example with `openssl rand -hex 32`
+- `BINANCE_SQUARE_OPENAPI_KEY` — the Binance Square posting key
 
-AI fallback keys (keep all you have; none were removed):
+At least one AI provider is required:
 
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY_1`
@@ -54,7 +78,7 @@ AI fallback keys (keep all you have; none were removed):
 - `GEMINI_API_KEY_3`
 - `SELF_HOSTED_API_KEY`
 
-Optional models/configuration:
+Optional defaults are already included in `render.yaml`:
 
 - `OPENAI_MODEL` — `gpt-5-mini`
 - `GEMINI_MODEL` — `gemini-2.5-flash`
@@ -63,25 +87,28 @@ Optional models/configuration:
 - `POST_MIN_WORDS` — `90`
 - `POST_MAX_WORDS` — `230`
 
-### GitHub scheduler secrets
+Never commit secret values to source control.
 
-In GitHub → Settings → Secrets and variables → Actions, add:
+## GitHub Actions secrets
 
-- `RENDER_AGENT_URL` — for example `https://your-service.onrender.com`
-- `AGENT_TRIGGER_TOKEN` — exactly the same value as the Render secret
+After the Render service is deployed, copy its public URL, such as:
 
-The scheduler is configured for **07:00 UTC / 08:00 Nigeria time (WAT)**.
+```text
+https://binance-ai-square-agent.onrender.com
+```
 
-### First test
+Add these repository secrets under **Settings → Secrets and variables → Actions**:
 
-After Render finishes deploying:
+- `RENDER_AGENT_URL` — the Render URL without a trailing slash
+- `AGENT_TRIGGER_TOKEN` — exactly the same value configured in Render
 
-1. Open `https://your-service.onrender.com/health`.
-2. It should return `{"status":"ok"}`.
-3. In GitHub Actions run **Trigger Render Binance Agent** manually.
-4. Watch the Render logs.
+The daily workflow at `07:00 UTC` first synchronizes the GitHub history to Render, calls the authenticated `/run` endpoint, then retrieves the updated history and commits it back to GitHub. The workflow does not call Binance directly.
 
-The Render log begins with network diagnostics such as:
+Run **Trigger Binance AI Agent** manually with `dry_run=true` before enabling the first live post.
+
+## HTTP 451 diagnostics
+
+Every agent run prints:
 
 ```text
 === NETWORK DIAGNOSTICS ===
@@ -91,53 +118,12 @@ www.binance.com: HTTP ...
 === END NETWORK DIAGNOSTICS ===
 ```
 
-If GitHub gets HTTP 451 but Render successfully reaches/publishes to Square, the runner network was a likely factor.
-
-If Render also receives HTTP 451, do not immediately buy a dedicated IP. That points toward a Binance geographic/network/API eligibility issue and should be investigated from the actual response.
-
-## AI fallback chain
-
-The existing multi-provider system is preserved:
-
-1. OpenAI
-2. Gemini API key 1
-3. Gemini API key 2
-4. Gemini API key 3
-5. Self-hosted Phoenix AI Router
-
-A provider failure, quota error, timeout, or invalid response moves to the next configured provider.
-
-You can therefore use only Gemini, only self-hosted, OpenAI + Gemini, or all providers together.
-
-## Binance Square OpenAPI
-
-The agent continues using the Binance Square OpenAPI publisher. The Square key is separate from normal Binance trading/withdrawal credentials.
-
-Never put Binance trading keys, wallet private keys, or API secrets in source code.
-
-## History persistence
-
-Render free services have ephemeral local storage. The agent therefore supports optional GitHub Contents API persistence:
-
-- `GITHUB_AGENT_TOKEN`
-- `GITHUB_AGENT_REPO` (default in `render.yaml`: `Phoenix1185/binance-ai-square-agent`)
-
-If configured, the latest `data/history.json` is committed back to the repository after a successful post. This keeps duplicate detection and the GitHub Pages dashboard history available across Render restarts.
-
-For the GitHub token, use a narrowly scoped fine-grained token that can write only the repository contents needed by this agent. Do not use an account password or Binance credential.
-
-## Endpoints
-
-- `GET /` — service information
-- `GET /health` — health check
-- `POST /run` — authenticated agent execution
-
-Authentication for `/run` uses the `X-Agent-Trigger-Token` header.
+If GitHub Actions receives HTTP 451 but Render reaches Binance normally, the GitHub runner network/location is likely the factor. If Render also receives HTTP 451, investigate Binance geographic, network, or API eligibility restrictions; changing hosting region is not guaranteed to resolve it.
 
 ## Local test
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -146,9 +132,13 @@ export AGENT_TRIGGER_TOKEN="YOUR_RANDOM_TRIGGER_SECRET"
 export SELF_HOSTED_API_KEY="YOUR_ROUTER_KEY"
 
 python src/agent.py --dry-run
-python server.py
+python src/web.py
 ```
 
-## Safety/content behavior
+Then check `http://localhost:10000/health`.
 
-The agent is designed for original informational content. It does not automate likes, follows, comments, views, multiple accounts, or artificial engagement. It also rejects basic scam/guaranteed-profit language and checks recent posts for excessive similarity.
+## Safety
+
+The agent creates original informational content. It does not automate likes, follows, comments, views, multiple accounts, or artificial engagement. It rejects basic scam and guaranteed-profit language and checks recent posts for excessive similarity.
+
+The Binance Square key is separate from normal Binance trading, withdrawal, or wallet credentials.

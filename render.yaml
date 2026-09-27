@@ -1,5 +1,3 @@
-# FREE Render Web Service.
-# GitHub Actions is only the scheduler/trigger; Binance is contacted by Render.
 services:
   - type: web
     name: binance-ai-square-agent
@@ -7,15 +5,10 @@ services:
     plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT server:app
+    startCommand: python src/web.py
+    healthCheckPath: /health
     envVars:
       - key: AGENT_TRIGGER_TOKEN
-        sync: false
-      - key: GITHUB_AGENT_TOKEN
-        sync: false
-      - key: GITHUB_AGENT_REPO
-        value: Phoenix1185/binance-ai-square-agent
-      - key: BINANCE_SQUARE_OPENAPI_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
@@ -26,6 +19,8 @@ services:
       - key: GEMINI_API_KEY_3
         sync: false
       - key: SELF_HOSTED_API_KEY
+        sync: false
+      - key: BINANCE_SQUARE_OPENAPI_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5-mini
